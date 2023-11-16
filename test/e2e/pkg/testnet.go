@@ -19,7 +19,7 @@ import (
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/secp256k1"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
-
+	mcs "github.com/cometbft/cometbft/test/maverick/consensus"
 	_ "embed"
 )
 
@@ -65,26 +65,28 @@ const (
 
 // Testnet represents a single testnet.
 type Testnet struct {
-	Name                 string
-	File                 string
-	Dir                  string
-	IP                   *net.IPNet
-	InitialHeight        int64
-	InitialState         map[string]string
-	Validators           map[*Node]int64
-	ValidatorUpdates     map[int64]map[*Node]int64
-	Nodes                []*Node
-	KeyType              string
-	Evidence             int
-	LoadTxSizeBytes      int
-	LoadTxBatchSize      int
-	LoadTxConnections    int
-	ABCIProtocol         string
+	Name                                                 string
+	File                                                 string
+	Dir                                                  string
+	IP                                                   *net.IPNet
+	InitialHeight                                        int64
+	InitialState                                         map[string]string
+	Validators                                           map[*Node]int64
+	ValidatorUpdates                                     map[int64]map[*Node]int64
+	Nodes                                                []*Node
+	KeyType                                              string
+	Evidence                                             int
+	LoadTxSizeBytes                                      int
+	LoadTxBatchSize                                      int
+	LoadTxConnections                                    int
+	ABCIProtocol                                         string
 	PrepareProposalDelay time.Duration
 	ProcessProposalDelay time.Duration
 	CheckTxDelay         time.Duration
-	UpgradeVersion       string
-	Prometheus           bool
+	UpgradeVersion                                       string
+	Prometheus                                           bool
+	ExperimentalMaxGossipConnectionsToPersistentPeers    uint
+	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint
 }
 
 // Node represents a CometBFT node in a testnet.
@@ -110,6 +112,7 @@ type Node struct {
 	Seeds               []*Node
 	PersistentPeers     []*Node
 	Perturbations       []Perturbation
+	Misbehaviors        map[int64]string
 	SendNoLoad          bool
 	Prometheus          bool
 	PrometheusProxyPort uint32
@@ -150,6 +153,8 @@ func LoadTestnet(manifest Manifest, fname string, ifd InfrastructureData) (*Test
 		CheckTxDelay:         manifest.CheckTxDelay,
 		UpgradeVersion:       manifest.UpgradeVersion,
 		Prometheus:           manifest.Prometheus,
+		ExperimentalMaxGossipConnectionsToPersistentPeers:    manifest.ExperimentalMaxGossipConnectionsToPersistentPeers,
+		ExperimentalMaxGossipConnectionsToNonPersistentPeers: manifest.ExperimentalMaxGossipConnectionsToNonPersistentPeers,
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
@@ -211,6 +216,7 @@ func LoadTestnet(manifest Manifest, fname string, ifd InfrastructureData) (*Test
 			SnapshotInterval: nodeManifest.SnapshotInterval,
 			RetainBlocks:     nodeManifest.RetainBlocks,
 			Perturbations:    []Perturbation{},
+			Misbehaviors:     make(map[int64]string),
 			SendNoLoad:       nodeManifest.SendNoLoad,
 			Prometheus:       testnet.Prometheus,
 		}
@@ -237,6 +243,13 @@ func LoadTestnet(manifest Manifest, fname string, ifd InfrastructureData) (*Test
 		}
 		for _, p := range nodeManifest.Perturb {
 			node.Perturbations = append(node.Perturbations, Perturbation(p))
+		}
+		for heightString, misbehavior := range nodeManifest.Misbehaviors {
+			height, err := strconv.ParseInt(heightString, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse height %s to int64: %w", heightString, err)
+			}
+			node.Misbehaviors[height] = misbehavior
 		}
 		testnet.Nodes = append(testnet.Nodes, node)
 	}
@@ -421,6 +434,30 @@ func (n Node) Validate(testnet Testnet) error {
 		case PerturbationDisconnect, PerturbationKill, PerturbationPause, PerturbationRestart:
 		default:
 			return fmt.Errorf("invalid perturbation %q", perturbation)
+		}
+	}
+
+	if (n.PrivvalProtocol != "file" || n.Mode != "validator") && len(n.Misbehaviors) != 0 {
+		return errors.New("must be using \"file\" privval protocol to implement misbehaviors")
+	}
+
+	for height, misbehavior := range n.Misbehaviors {
+		if height < n.StartAt {
+			return fmt.Errorf("misbehavior height %d is below node start height %d",
+				height, n.StartAt)
+		}
+		if height < testnet.InitialHeight {
+			return fmt.Errorf("misbehavior height %d is below network initial height %d",
+				height, testnet.InitialHeight)
+		}
+		exists := false
+		for possibleBehaviors := range mcs.MisbehaviorList {
+			if possibleBehaviors == misbehavior {
+				exists = true
+			}
+		}
+		if !exists {
+			return fmt.Errorf("misbehavior %s does not exist", misbehavior)
 		}
 	}
 
