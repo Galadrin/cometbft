@@ -24,7 +24,7 @@ const (
 	// DefaultLogLevel defines a default log level as INFO.
 	DefaultLogLevel = "info"
 
-	// Mempool versions. V1 is prioritized mempool (deprecated), v0 is regular mempool.
+	// Mempool versions. V1 is prioritized mempool, v0 is regular mempool.
 	// Default is v0.
 	MempoolV0 = "v0"
 	MempoolV1 = "v1"
@@ -759,6 +759,20 @@ type MempoolConfig struct {
 	// Including space needed by encoding (one varint per transaction).
 	// XXX: Unused due to https://github.com/tendermint/tendermint/issues/5796
 	MaxBatchBytes int `mapstructure:"max_batch_bytes"`
+	// Experimental parameters to limit gossiping txs to up to the specified number of peers.
+	// This feature is only available for the default mempool (version config set to "v0").
+	// We use two independent upper values for persistent peers and for non-persistent peers.
+	// Unconditional peers are not affected by this feature.
+	// If we are connected to more than the specified number of persistent peers, only send txs to
+	// the first ExperimentalMaxGossipConnectionsToPersistentPeers of them. If one of those
+	// persistent peers disconnects, activate another persistent peer. Similarly for non-persistent
+	// peers, with an upper limit of ExperimentalMaxGossipConnectionsToNonPersistentPeers.
+	// If set to 0, the feature is disabled for the corresponding group of peers, that is, the
+	// number of active connections to that group of peers is not bounded.
+	// For non-persistent peers, if enabled, a value of 10 is recommended based on experimental
+	// performance results using the default P2P configuration.
+	ExperimentalMaxGossipConnectionsToPersistentPeers    int `mapstructure:"experimental_max_gossip_connections_to_persistent_peers"`
+	ExperimentalMaxGossipConnectionsToNonPersistentPeers int `mapstructure:"experimental_max_gossip_connections_to_non_persistent_peers"`
 
 	// TTLDuration, if non-zero, defines the maximum amount of time a transaction
 	// can exist for in the mempool.
@@ -792,12 +806,14 @@ func DefaultMempoolConfig() *MempoolConfig {
 		WalPath:   "",
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
-		Size:                  5000,
-		MaxTxsBytes:           1024 * 1024 * 1024, // 1GB
-		CacheSize:             10000,
-		MaxTxBytes:            1024 * 1024, // 1MB
-		TTLDuration:           0 * time.Second,
-		TTLNumBlocks:          0,
+		Size:        5000,
+		MaxTxsBytes: 1024 * 1024 * 1024, // 1GB
+		CacheSize:   10000,
+		MaxTxBytes:  1024 * 1024, // 1MB
+		ExperimentalMaxGossipConnectionsToNonPersistentPeers: 0,
+		ExperimentalMaxGossipConnectionsToPersistentPeers:    0,
+		TTLDuration:  0 * time.Second,
+		TTLNumBlocks: 0,
 		KeepInvalidTxsInCache: false,
 	}
 }
@@ -833,6 +849,12 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 	}
 	if cfg.MaxTxBytes < 0 {
 		return errors.New("max_tx_bytes can't be negative")
+	}
+	if cfg.ExperimentalMaxGossipConnectionsToPersistentPeers < 0 {
+		return errors.New("experimental_max_gossip_connections_to_persistent_peers can't be negative")
+	}
+	if cfg.ExperimentalMaxGossipConnectionsToNonPersistentPeers < 0 {
+		return errors.New("experimental_max_gossip_connections_to_non_persistent_peers can't be negative")
 	}
 	return nil
 }

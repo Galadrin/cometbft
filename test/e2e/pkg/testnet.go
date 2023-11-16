@@ -85,6 +85,9 @@ type Testnet struct {
 	CheckTxDelay         time.Duration
 	UpgradeVersion       string
 	Prometheus           bool
+	ExperimentalMaxGossipConnectionsToPersistentPeers    uint
+	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint
+
 }
 
 // Node represents a CometBFT node in a testnet.
@@ -150,6 +153,8 @@ func LoadTestnet(manifest Manifest, fname string, ifd InfrastructureData) (*Test
 		CheckTxDelay:         manifest.CheckTxDelay,
 		UpgradeVersion:       manifest.UpgradeVersion,
 		Prometheus:           manifest.Prometheus,
+		ExperimentalMaxGossipConnectionsToPersistentPeers:    manifest.ExperimentalMaxGossipConnectionsToPersistentPeers,
+		ExperimentalMaxGossipConnectionsToNonPersistentPeers: manifest.ExperimentalMaxGossipConnectionsToNonPersistentPeers,
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
