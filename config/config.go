@@ -90,7 +90,7 @@ func DefaultConfig() *Config {
 		P2P:             DefaultP2PConfig(),
 		Mempool:         DefaultMempoolConfig(),
 		StateSync:       DefaultStateSyncConfig(),
-		FastSync:        DefaultFastSyncConfig(),
+		BlockSync:       TestBlockSyncConfig(),
 		Consensus:       DefaultConsensusConfig(),
 		Storage:         DefaultStorageConfig(),
 		TxIndex:         DefaultTxIndexConfig(),
@@ -806,10 +806,10 @@ func DefaultMempoolConfig() *MempoolConfig {
 		WalPath:   "",
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
-		Size:                  5000,
-		MaxTxsBytes:           1024 * 1024 * 1024, // 1GB
-		CacheSize:             10000,
-		MaxTxBytes:            1024 * 1024, // 1MB
+		Size:        5000,
+		MaxTxsBytes: 1024 * 1024 * 1024, // 1GB
+		CacheSize:   10000,
+		MaxTxBytes:  1024 * 1024, // 1MB
 		ExperimentalMaxGossipConnectionsToNonPersistentPeers: 0,
 		ExperimentalMaxGossipConnectionsToPersistentPeers:    0,
 		TTLDuration:           0 * time.Second,

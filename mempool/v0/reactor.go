@@ -1,11 +1,11 @@
 package v0
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/libs/clist"
 	"github.com/cometbft/cometbft/libs/log"
@@ -14,6 +14,7 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 	protomem "github.com/cometbft/cometbft/proto/tendermint/mempool"
 	"github.com/cometbft/cometbft/types"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -301,10 +302,10 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 		// https://github.com/tendermint/tendermint/issues/5796
 
 		if _, ok := memTx.senders.Load(peerID); !ok {
-			success := p2p.SendEnvelopeShim(peer, p2p.Envelope{ //nolint: staticcheck
+			success := peer.SendEnvelope(p2p.Envelope{
 				ChannelID: mempool.MempoolChannel,
 				Message:   &protomem.Txs{Txs: [][]byte{memTx.tx}},
-			}, memR.Logger)
+			})
 			if !success {
 				time.Sleep(mempool.PeerCatchupSleepIntervalMS * time.Millisecond)
 				continue
@@ -321,6 +322,35 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 			return
 		}
 	}
+}
+
+func (memR *Reactor) decodeMsg(bz []byte) (TxsMessage, error) {
+	msg := protomem.Message{}
+	err := msg.Unmarshal(bz)
+	if err != nil {
+		return TxsMessage{}, err
+	}
+
+	var message TxsMessage
+
+	if i, ok := msg.Sum.(*protomem.Message_Txs); ok {
+		txs := i.Txs.GetTxs()
+
+		if len(txs) == 0 {
+			return message, errors.New("empty TxsMessage")
+		}
+
+		decoded := make([]types.Tx, len(txs))
+		for j, tx := range txs {
+			decoded[j] = types.Tx(tx)
+		}
+
+		message = TxsMessage{
+			Txs: decoded,
+		}
+		return message, nil
+	}
+	return message, fmt.Errorf("msg type: %T is not supported", msg)
 }
 
 // TxsMessage is a Message containing transactions.
