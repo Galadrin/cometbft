@@ -105,6 +105,8 @@ func NewReactor(config *cfg.MempoolConfig, mempool *CListMempool) *Reactor {
 		ids:     newMempoolIDs(),
 	}
 	memR.BaseReactor = *p2p.NewBaseReactor("Mempool", memR)
+	memR.Logger.Info("INIT SEMAPHORE WITH: %v", int64(memR.config.ExperimentalMaxGossipConnectionsToNonPersistentPeers))
+
 	memR.activePersistentPeersSemaphore = semaphore.NewWeighted(int64(memR.config.ExperimentalMaxGossipConnectionsToPersistentPeers))
 	memR.activeNonPersistentPeersSemaphore = semaphore.NewWeighted(int64(memR.config.ExperimentalMaxGossipConnectionsToNonPersistentPeers))
 
@@ -169,7 +171,7 @@ func (memR *Reactor) AddPeer(peer p2p.Peer) {
 					defer memR.activePersistentPeersSemaphore.Release(1)
 					defer memR.mempool.metrics.ActiveOutboundConnections.Add(-1)
 				}
-
+				memR.Logger.Info("ExperimentalMaxGossipConnectionsToNonPersistentPeers: %v", memR.config.ExperimentalMaxGossipConnectionsToNonPersistentPeers)
 				if !peer.IsPersistent() && memR.config.ExperimentalMaxGossipConnectionsToNonPersistentPeers > 0 {
 					// Block sending transactions to peer until one of the connections become
 					// available in the semaphore.
