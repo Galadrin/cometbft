@@ -373,10 +373,12 @@ func createMempoolAndMempoolReactor(
 	memplMetrics *mempl.Metrics,
 	logger log.Logger,
 ) (mempl.Mempool, p2p.Reactor) {
+	logger.Info("Mempool version is ", config.Mempool.Version)
 	switch config.Mempool.Version {
 	case cfg.MempoolV1:
+		mempoolLogger := logger.With("module", "mempoolV1")
 		mp := mempoolv1.NewTxMempool(
-			logger,
+			mempoolLogger,
 			config.Mempool,
 			proxyApp.Mempool(),
 			state.LastBlockHeight,
@@ -396,6 +398,7 @@ func createMempoolAndMempoolReactor(
 		return mp, reactor
 
 	case cfg.MempoolV0:
+		mempoolLogger := logger.With("module", "mempoolV0")
 		mp := mempoolv0.NewCListMempool(
 			config.Mempool,
 			proxyApp.Mempool(),
@@ -405,7 +408,7 @@ func createMempoolAndMempoolReactor(
 			mempoolv0.WithPostCheck(sm.TxPostCheck(state)),
 		)
 
-		mp.SetLogger(logger)
+		mp.SetLogger(mempoolLogger)
 
 		reactor := mempoolv0.NewReactor(
 			config.Mempool,
